@@ -2,16 +2,14 @@ from __future__ import division
 import os
 import argparse
 import numpy as np
-from scikits.audiolab import wavread
 from scipy.signal import get_window
+from scipy.io import wavfile
 
 from utilities import nextpow2
-from pymei import MeiDocument, MeiElement, XmlExport
 
 # set up command line argument structure
 parser = argparse.ArgumentParser(description='Estimate the pitches in an audio file.')
 parser.add_argument('-fin', '--filein', help='input file')
-parser.add_argument('-fout', '--fileout', help='output file')
 parser.add_argument('-v', '--verbose', help='increase output verbosity', action='store_true')
 
 class F0Estimate:
@@ -118,7 +116,7 @@ class F0Estimate:
         if 'window_func' in kwargs:
             self._window_func = kwargs['window_func']
         else:
-            self._window_func = 'hanning'
+            self._window_func = 'hann'
 
         # set the bin width of the estimated spectrum of the partial
         # of the detected fundamental
@@ -144,7 +142,8 @@ class F0Estimate:
         if not os.path.exists(audio_path):
             raise ValueError('Invalid audio path')
 
-        x, fs, _ = wavread(audio_path)
+        fs, x = wavfile.read(audio_path)
+
 
         # make x mono if stereo
         if x.ndim > 1:
@@ -183,7 +182,7 @@ class F0Estimate:
         # zero-pad to twice the length of the frame
         K = int(nextpow2(2*frame_len_samps))
         X = np.array([np.fft.fft(win*x[i:i+frame_len_samps], K) 
-                     for i in xrange(0, len(x)-frame_len_samps, frame_len_samps)])
+                     for i in range(0, len(x)-frame_len_samps, frame_len_samps)])
 
         return X
 
@@ -218,13 +217,13 @@ class F0Estimate:
                 break
 
         c = np.asarray(c)
-        c_bins = np.asarray(np.floor(c*K/fs), np.int)
+        c_bins = np.asarray(np.floor(c*K/fs), np.int64)
 
         # subband compression coefficients -> gamma (K/2,)
         gamma = np.zeros([T, nyquist_bin])
 
         # for each subband
-        for b in xrange(1,len(c_bins)-1):
+        for b in range(1,len(c_bins)-1):
             H = np.zeros(nyquist_bin)
 
             left = c_bins[b-1]
@@ -240,7 +239,7 @@ class F0Estimate:
     
             # interpolate between the previous centre bin and the current centre bin
             # for each STFT frame
-            for t in xrange(T):
+            for t in range(T):
                 gamma[t,left:centre] = np.linspace(gamma[t,left], gamma[t,centre], centre - left)
 
         # calculate the whitened spectrum. Only need to store half the spectrum for analysis
@@ -254,7 +253,7 @@ class F0Estimate:
 
         T = Y.shape[0]
         # for each STFT frame
-        for t in xrange(T):
+        for t in range(T):
             # residual magnitude spectrum of the analysis frame
             Y_t_R = np.abs(Y[t,:])
 
@@ -354,7 +353,7 @@ class F0Estimate:
 
         # for each harmonic
         harmonics = []
-        for m in xrange(1,num_harmonics+1):
+        for m in range(1,num_harmonics+1):
             harmonic_lb = round(m*lb_vicinity)
             harmonic_ub = min(round(m*ub_vicinity), nyquist_bin)
             harmonic_bin = np.argmax(Y_t_R[harmonic_lb-1:harmonic_ub]) + harmonic_lb-1
@@ -419,96 +418,7 @@ class F0Estimate:
 
         return notes_c
    
-    def write_mei(self, notes, output_path=None):
-        # begin constructing mei document
-        meidoc = MeiDocument()
-        mei = MeiElement('mei')
-        meidoc.setRootElement(mei)
-        mei_head = MeiElement('meiHead')
-        mei.addChild(mei_head)
-
-        music = MeiElement('music')
-        body = MeiElement('body')
-        mdiv = MeiElement('mdiv')
-        score = MeiElement('score')
-        score_def = MeiElement('scoreDef')
-
-        # assume 4/4 time signature
-        meter_count = 4
-        meter_unit = 4
-        score_def.addAttribute('meter.count', str(meter_count))
-        score_def.addAttribute('meter.unit', str(meter_unit))
-        
-        staff_def = MeiElement('staffDef')
-        staff_def.addAttribute('n', '1')
-        staff_def.addAttribute('label.full', 'Electric Guitar')
-        staff_def.addAttribute('clef.shape', 'TAB')
-
-        instr_def = MeiElement('instrDef')
-        instr_def.addAttribute('n', 'Electric_Guitar')
-        instr_def.addAttribute('midi.channel', '1')
-        instr_def.addAttribute('midi.instrnum', '28')
-
-        mei.addChild(music)
-        music.addChild(body)
-        body.addChild(mdiv)
-        mdiv.addChild(score)
-        score.addChild(score_def)
-        score_def.addChild(staff_def)
-        staff_def.addChild(instr_def)
-
-        section = MeiElement('section')
-        score.addChild(section)
-        # another score def
-        score_def = MeiElement('scoreDef')
-        score_def.addAttribute('meter.count', str(meter_count))
-        score_def.addAttribute('meter.unit', str(meter_unit))
-        section.addChild(score_def)
-        
-        # start writing pitches to file
-        note_container = None
-        for i, frame_n in enumerate(notes):
-            if i % meter_count == 0:
-                measure = MeiElement('measure')
-                measure.addAttribute('n', str(int(i/meter_count + 1)))
-                staff = MeiElement('staff')
-                staff.addAttribute('n', '1')
-                layer = MeiElement('layer')
-                layer.addAttribute('n', '1')
-                section.addChild(measure)
-                measure.addChild(staff)
-                staff.addChild(layer)
-                note_container = layer
-
-            if len(frame_n) > 1:
-                chord = MeiElement('chord')
-                for n in frame_n:
-                    note = MeiElement('note')
-                    pname = n['pname'][0].upper()
-                    note.addAttribute('pname', pname)
-                    note.addAttribute('oct', str(n['oct']))
-                    if len(n['pname']) > 1 and n['pname'][1] == '#':
-                        # there is an accidental
-                        note.addAttribute('accid.ges', 's')
-                    note.addAttribute('dur', str(meter_unit))
-                    chord.addChild(note)
-                note_container.addChild(chord)
-            else:
-                n = frame_n[0]
-                note = MeiElement('note')
-                pname = n['pname'][0].upper()
-                note.addAttribute('pname', pname)
-                note.addAttribute('oct', str(n['oct']))
-                if len(n['pname']) > 1 and n['pname'][1] == '#':
-                    # there is an accidental
-                    note.addAttribute('accid.ges', 's')
-                note.addAttribute('dur', str(meter_unit))
-                note_container.addChild(note)
-
-        if output_path is not None:
-            XmlExport.meiDocumentToFile(meidoc, output_path)
-        else:
-            return XmlExport.meiDocumentToText(meidoc)
+  
 
 if __name__ == '__main__':
     # parse command line arguments
@@ -518,17 +428,12 @@ if __name__ == '__main__':
     if not os.path.exists(input_path):
         raise ValueError('The input file does not exist')
 
-    output_path = args.fileout
-
     # check file extensions are correct for this type of conversion
     _, input_ext = os.path.splitext(input_path)
     if input_ext != '.wav':
         raise ValueError('Input path must be a wav file')
-    _, output_ext = os.path.splitext(output_path)
-    if output_ext != '.mei':
-        raise ValueError('Ouput path must have the file extension .mei')
 
     freq_est = F0Estimate(max_poly=6)
     f0_estimates, notes = freq_est.estimate_f0s(input_path)
     notes_c = freq_est.collapse_notes(notes)
-    freq_est.write_mei(notes_c, output_path)
+    print(*notes_c, sep='\n')

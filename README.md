@@ -3,6 +3,15 @@ Multiple Fundamental Frequency Estimation
 
 Multiple F0 estimation based on Anssi Klapuri's 2006 paper, "Multiple Fundamental Frequency Estimation by Summing Harmonic Amplitudes". Implemented in Python using NumPy.
 
+Fork changes
+-------------
+
+I made minimal code changes to make it work on modern python versions.  
+What have I done
+- Removed Mei, added simple print instead
+- Replaced scikits with scipy for reading wav files
+
+
 Current Status
 --------------
 
