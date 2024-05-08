@@ -10,6 +10,10 @@ I made minimal code changes to make it work on modern python versions.
 What have I done
 - Removed Mei, added simple print instead
 - Replaced scikits with scipy for reading wav files
+- Refactored the code to a python package
+- Added requirements.txt and poetry configuration
+- Moved F0Estimate class to separate file and added it to `__init__.py` so it can be used as a library
+- Formatted everything
 
 
 Current Status
