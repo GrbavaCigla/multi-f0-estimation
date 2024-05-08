@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "mf0e"
+version = "0.1.0"
+description = "Multiple F0 estimation based on Anssi Klapuri's 2006 paper, \"Multiple Fundamental Frequency Estimation by Summing Harmonic Amplitudes\". Implemented in Python using NumPy."
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+scipy = "^1.13.0"
+numpy = "^1.26.4"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

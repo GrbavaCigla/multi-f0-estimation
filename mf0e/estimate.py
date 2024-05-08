@@ -1,16 +1,9 @@
-from __future__ import division
 import os
 import argparse
 import numpy as np
 from scipy.signal import get_window
 from scipy.io import wavfile
 
-from utilities import nextpow2
-
-# set up command line argument structure
-parser = argparse.ArgumentParser(description='Estimate the pitches in an audio file.')
-parser.add_argument('-fin', '--filein', help='input file')
-parser.add_argument('-v', '--verbose', help='increase output verbosity', action='store_true')
 
 class F0Estimate:
 
@@ -180,7 +173,7 @@ class F0Estimate:
         win = get_window(self._window_func, frame_len_samps)
 
         # zero-pad to twice the length of the frame
-        K = int(nextpow2(2*frame_len_samps))
+        K = int(2**np.ceil(np.log2(2*frame_len_samps)))
         X = np.array([np.fft.fft(win*x[i:i+frame_len_samps], K) 
                      for i in range(0, len(x)-frame_len_samps, frame_len_samps)])
 
@@ -417,23 +410,3 @@ class F0Estimate:
             prev_frame = frame_n
 
         return notes_c
-   
-  
-
-if __name__ == '__main__':
-    # parse command line arguments
-    args = parser.parse_args()
-
-    input_path = args.filein
-    if not os.path.exists(input_path):
-        raise ValueError('The input file does not exist')
-
-    # check file extensions are correct for this type of conversion
-    _, input_ext = os.path.splitext(input_path)
-    if input_ext != '.wav':
-        raise ValueError('Input path must be a wav file')
-
-    freq_est = F0Estimate(max_poly=6)
-    f0_estimates, notes = freq_est.estimate_f0s(input_path)
-    notes_c = freq_est.collapse_notes(notes)
-    print(*notes_c, sep='\n')
